@@ -18,10 +18,11 @@ type Obstacle struct {
 }
 
 type Game struct {
-	playerX  float32
-	playerY  float32
-	vy       float32
-	onGround bool
+	playerX   float32
+	playerY   float32
+	vy        float32
+	jumpCount int
+	onGround  bool
 
 	obstacles []Obstacle
 	spawnTick int
@@ -34,20 +35,20 @@ type Game struct {
 	score     int
 	highScore int
 	gameOver  bool
+
+	lastSpacePressed bool
 }
 
-func isColliding(ax, ay, aw, ah, bx, by, bw, bh, margin float32) bool {
-	if margin > 0 {
-		ax = ax + margin
-		ay = ay + margin
-		aw = aw - 2*margin
-		ah = ah - 2*margin
+func isColliding(ax, ay, aw, ah, am float32, bx, by, bw, bh, bm float32) bool {
+	ax += am
+	ay += am
+	aw -= 2 * am
+	ah -= 2 * am
 
-		bx = bx + margin
-		by = by + margin
-		bw = bw - 2*margin
-		bh = bh - 2*margin
-	}
+	bx += bm
+	by += bm
+	bw -= 2 * bm
+	bh -= 2 * bm
 
 	return ax < bx+bw &&
 		ax+aw > bx &&
@@ -56,14 +57,18 @@ func isColliding(ax, ay, aw, ah, bx, by, bw, bh, margin float32) bool {
 }
 
 const (
+	maxjumpCount = 2
+
 	screenWidth  = 800
 	screenHeight = 600
 
 	playerWidth  = 88
 	playerHeight = 94
 
-	collidingMargin = float32(10)
-	groundHeight    = 100
+	dinoMargin   = float32(20)
+	cactusMargin = float32(5)
+
+	groundHeight = 100
 )
 
 func (g *Game) Update() error {
@@ -73,6 +78,7 @@ func (g *Game) Update() error {
 			g.playerY = float32(screenHeight - groundHeight - playerHeight)
 			g.vy = 0
 			g.onGround = true
+			g.jumpCount = 0
 			g.obstacles = nil
 			g.spawnTick = 0
 			g.score = 0
@@ -84,10 +90,17 @@ func (g *Game) Update() error {
 	}
 
 	// jump
-	if ebiten.IsKeyPressed(ebiten.KeySpace) && g.onGround {
-		g.vy = -10
-		g.onGround = false
+	spaceNow := ebiten.IsKeyPressed(ebiten.KeySpace)
+	if spaceNow && !g.lastSpacePressed && g.jumpCount < maxjumpCount {
+		if g.jumpCount == 0 {
+			g.vy = -10
+		} else {
+			g.vy = -9
+		}
+		g.jumpCount++
 	}
+	g.lastSpacePressed = spaceNow
+
 	g.vy += 0.5
 	g.playerY += g.vy
 	groundY := float32(screenHeight - groundHeight - playerHeight)
@@ -95,12 +108,12 @@ func (g *Game) Update() error {
 		g.playerY = groundY
 		g.vy = 0
 		g.onGround = true
+		g.jumpCount = 0
 	}
 
 	// obstacles
-
 	g.spawnTick++
-	if g.spawnTick >= 120 {
+	if g.spawnTick >= rand.Intn(100)+150 {
 		g.spawnTick = 0
 
 		img := g.cactusFrames[rand.Intn(len(g.cactusFrames))]
@@ -120,9 +133,10 @@ func (g *Game) Update() error {
 
 		for _, ob := range g.obstacles {
 			w, h := ob.img.Bounds().Dx(), ob.img.Bounds().Dy()
+
 			if isColliding(
-				g.playerX, g.playerY, playerWidth, playerHeight,
-				ob.x, ob.y, float32(w), float32(h), collidingMargin,
+				g.playerX, g.playerY, playerWidth, playerHeight, dinoMargin,
+				ob.x, ob.y, float32(w), float32(h), cactusMargin,
 			) {
 				if g.score > g.highScore {
 					g.highScore = g.score
