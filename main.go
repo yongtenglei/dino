@@ -8,8 +8,11 @@ import (
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	text "github.com/hajimehoshi/ebiten/v2/text/v2"
+	"golang.org/x/image/font/basicfont"
 )
+
+var gray = color.RGBA{0x88, 0x88, 0x88, 0xff}
 
 type Obstacle struct {
 	x   float32
@@ -180,9 +183,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	drawRect(screen, 0, float32(screenHeight-groundHeight), float32(screenWidth), 2, color.Black)
 
 	// dino
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(g.playerX), float64(g.playerY))
-	screen.DrawImage(g.dinoFrames[g.animFrame], op)
+	drawDinoOpts := &ebiten.DrawImageOptions{}
+	drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
+	screen.DrawImage(g.dinoFrames[g.animFrame], drawDinoOpts)
 
 	// obstacles
 	for _, ob := range g.obstacles {
@@ -194,12 +197,25 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// score
 	scoreText := fmt.Sprintf("Score: %d", g.score)
 	highScoreText := fmt.Sprintf("High Score: %d", g.highScore)
-	ebitenutil.DebugPrintAt(screen, scoreText, 10, 10)
-	ebitenutil.DebugPrintAt(screen, highScoreText, 10, 30)
+
+	face := text.NewGoXFace(basicfont.Face7x13)
+
+	drawScoreOpts := &text.DrawOptions{}
+	drawScoreOpts.GeoM.Translate(10, 20)
+	drawScoreOpts.ColorScale.ScaleWithColor(gray)
+	text.Draw(screen, scoreText, face, drawScoreOpts)
+
+	drawHighScoreOpts := &text.DrawOptions{}
+	drawHighScoreOpts.GeoM.Translate(10, 40)
+	drawHighScoreOpts.ColorScale.ScaleWithColor(gray)
+	text.Draw(screen, highScoreText, face, drawHighScoreOpts)
 
 	if g.gameOver {
+		drawGameOverOpts := &text.DrawOptions{}
+		drawGameOverOpts.GeoM.Translate(screenWidth/2-100, 60)
+		drawGameOverOpts.ColorScale.ScaleWithColor(gray)
 		msg := "GAME OVER - Press R to Restart"
-		ebitenutil.DebugPrintAt(screen, msg, screenWidth/2-100, 50)
+		text.Draw(screen, msg, face, drawGameOverOpts)
 	}
 }
 
@@ -256,7 +272,7 @@ func main() {
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("Dino Jump in Go")
+	ebiten.SetWindowTitle("Dino makes me feel great again!")
 	if err := ebiten.RunGame(game); err != nil {
 		panic(err)
 	}
