@@ -2,17 +2,19 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"image/color"
+	"math/rand"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 type Obstacle struct {
-	x float32
-	y float32
-	w float32
-	h float32
+	x   float32
+	y   float32
+	img *ebiten.Image
 }
 
 type Game struct {
@@ -24,12 +26,29 @@ type Game struct {
 	obstacles []Obstacle
 	spawnTick int
 
+	dinoFrames   []*ebiten.Image
+	cactusFrames []*ebiten.Image
+	animFrame    int
+	animTick     int
+
 	score     int
 	highScore int
 	gameOver  bool
 }
 
-func isColliding(ax, ay, aw, ah, bx, by, bw, bh float32) bool {
+func isColliding(ax, ay, aw, ah, bx, by, bw, bh, margin float32) bool {
+	if margin > 0 {
+		ax = ax + margin
+		ay = ay + margin
+		aw = aw - 2*margin
+		ah = ah - 2*margin
+
+		bx = bx + margin
+		by = by + margin
+		bw = bw - 2*margin
+		bh = bh - 2*margin
+	}
+
 	return ax < bx+bw &&
 		ax+aw > bx &&
 		ay < by+bh &&
@@ -40,10 +59,11 @@ const (
 	screenWidth  = 800
 	screenHeight = 600
 
-	playerWidth  = 40
-	playerHeight = 40
+	playerWidth  = 88
+	playerHeight = 94
 
-	groundHeight = 100
+	collidingMargin = float32(10)
+	groundHeight    = 100
 )
 
 func (g *Game) Update() error {
@@ -78,17 +98,20 @@ func (g *Game) Update() error {
 	}
 
 	// obstacles
+
 	g.spawnTick++
 	if g.spawnTick >= 120 {
 		g.spawnTick = 0
+
+		img := g.cactusFrames[rand.Intn(len(g.cactusFrames))]
+		h := img.Bounds().Dy()
+
 		ob := Obstacle{
-			x: float32(screenWidth),
-			y: float32(screenHeight - groundHeight - 40),
-			w: 20,
-			h: 40,
+			x:   float32(screenWidth),
+			y:   float32(screenHeight - groundHeight - float32(h)),
+			img: img,
 		}
 		g.obstacles = append(g.obstacles, ob)
-
 	}
 
 	// colliding
@@ -96,15 +119,10 @@ func (g *Game) Update() error {
 		g.score++
 
 		for _, ob := range g.obstacles {
+			w, h := ob.img.Bounds().Dx(), ob.img.Bounds().Dy()
 			if isColliding(
-				g.playerX,
-				g.playerY,
-				playerWidth,
-				playerHeight,
-				ob.x,
-				ob.y,
-				ob.w,
-				ob.h,
+				g.playerX, g.playerY, playerWidth, playerHeight,
+				ob.x, ob.y, float32(w), float32(h), collidingMargin,
 			) {
 				if g.score > g.highScore {
 					g.highScore = g.score
@@ -124,11 +142,18 @@ func (g *Game) Update() error {
 	newObstacles := g.obstacles[:0]
 	for _, ob := range g.obstacles {
 		ob.x -= speed
-		if ob.x+ob.w > 0 {
+		w := ob.img.Bounds().Dx()
+		if ob.x+float32(w) > 0 {
 			newObstacles = append(newObstacles, ob)
 		}
 	}
 	g.obstacles = newObstacles
+
+	g.animTick++
+	if g.animTick >= 10 {
+		g.animTick = 0
+		g.animFrame = (g.animFrame + 1) % len(g.dinoFrames)
+	}
 
 	return nil
 }
@@ -141,11 +166,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	drawRect(screen, 0, float32(screenHeight-groundHeight), float32(screenWidth), 2, color.Black)
 
 	// dino
-	drawRect(screen, g.playerX, g.playerY, playerWidth, playerHeight, color.Black)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(g.playerX), float64(g.playerY))
+	screen.DrawImage(g.dinoFrames[g.animFrame], op)
 
 	// obstacles
 	for _, ob := range g.obstacles {
-		drawRect(screen, ob.x, ob.y, ob.w, ob.h, color.RGBA{0x22, 0x88, 0x22, 0xff})
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(ob.x), float64(ob.y))
+		screen.DrawImage(ob.img, op)
 	}
 
 	// score
@@ -173,12 +202,45 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return screenWidth, screenHeight
 }
 
-func main() {
-	game := &Game{
-		playerX:  100,
-		playerY:  float32(screenHeight - groundHeight - playerHeight),
-		onGround: true,
+func loadSprite(path string) *ebiten.Image {
+	f, err := os.Open(path)
+	if err != nil {
+		panic(err)
 	}
+	defer f.Close()
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		panic(err)
+	}
+	return ebiten.NewImageFromImage(img)
+}
+
+func main() {
+	sprite := loadSprite("assets/sprite.png")
+
+	// dino
+	dinoFrames := []*ebiten.Image{
+		sprite.SubImage(image.Rect(1514, 0, 1514+88, 0+94)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(1603, 0, 1603+88, 0+94)).(*ebiten.Image),
+	}
+
+	// obstacles
+	cactusFrames := []*ebiten.Image{
+		sprite.SubImage(image.Rect(446, 2, 446+34, 2+70)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(548, 2, 548+68, 2+70)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(652, 2, 652+49, 2+100)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(802, 2, 802+99, 2+100)).(*ebiten.Image),
+	}
+
+	game := &Game{
+		playerX:      100,
+		playerY:      float32(screenHeight - groundHeight - 94),
+		onGround:     true,
+		dinoFrames:   dinoFrames,
+		cactusFrames: cactusFrames,
+	}
+
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetWindowTitle("Dino Jump in Go")
 	if err := ebiten.RunGame(game); err != nil {
