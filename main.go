@@ -28,9 +28,11 @@ type Game struct {
 	jumpCount int
 	onGround  bool
 
-	cactuses  []Obstacle
-	birds     []Obstacle
-	spawnTick int
+	cactuses            []Obstacle
+	birds               []Obstacle
+	cactusSpawnTick     int
+	birdSpawnTick       int
+	birdOscillationTime float64
 
 	dinoFrames   []*ebiten.Image
 	cactusFrames []*ebiten.Image
@@ -77,6 +79,9 @@ const (
 	dinoMargin   = float64(20)
 	cactusMargin = float64(5)
 
+	minBirdOffset = 100
+	maxBirdOffset = 180
+
 	groundHeight = 100
 
 	gameSpeed = float64(5)
@@ -91,7 +96,8 @@ func (g *Game) Update() error {
 			g.onGround = true
 			g.jumpCount = 0
 			g.cactuses = nil
-			g.spawnTick = 0
+			g.cactusSpawnTick = 0
+			g.birdSpawnTick = 0
 			g.score = 0
 			g.gameOver = false
 			return nil
@@ -123,9 +129,10 @@ func (g *Game) Update() error {
 	}
 
 	// obstacles
-	g.spawnTick++
-	if g.spawnTick >= rand.Intn(100)+150 {
-		g.spawnTick = 0
+	// cactus
+	g.cactusSpawnTick++
+	if g.cactusSpawnTick >= rand.Intn(100)+150 {
+		g.cactusSpawnTick = 0
 
 		img := g.cactusFrames[rand.Intn(len(g.cactusFrames))]
 		h := img.Bounds().Dy()
@@ -139,9 +146,13 @@ func (g *Game) Update() error {
 	}
 
 	// birds
-	if rand.Float64() < 0.01 { // x% per frame to generate a bird
+	g.birdSpawnTick++
+	if g.birdSpawnTick >= rand.Intn(100)+rand.Intn(50)+200 {
+		g.birdSpawnTick = 0
+
 		img := g.birdFrames[rand.Intn(len(g.birdFrames))]
-		y := float64(screenHeight - groundHeight - playerHeight - rand.Intn(100) - 50)
+		randOffset := float64(rand.Intn(maxBirdOffset-minBirdOffset)) + minBirdOffset
+		y := float64(screenHeight - groundHeight - playerHeight - randOffset)
 
 		bird := Obstacle{
 			x:   float64(screenWidth),
@@ -154,7 +165,7 @@ func (g *Game) Update() error {
 	g.score++
 
 	// colliding
-	// cactuses
+	// cactus
 	if !g.gameOver {
 		for _, c := range g.cactuses {
 			w, h := c.img.Bounds().Dx(), c.img.Bounds().Dy()
@@ -208,9 +219,13 @@ func (g *Game) Update() error {
 	g.cactuses = newCactuses
 
 	// move birds
+	g.birdOscillationTime += 0.05
 	newBirds := g.birds[:0]
-	for _, b := range g.birds {
-		b.x -= gameSpeed
+	for i, b := range g.birds {
+		osc := math.Sin(g.birdOscillationTime + float64(i))
+		speed := gameSpeed + osc*1.5
+		b.x -= speed
+		b.y += osc * 0.5
 		w := b.img.Bounds().Dx()
 		if b.x+float64(w) > 0 {
 			newBirds = append(newBirds, b)
@@ -223,9 +238,10 @@ func (g *Game) Update() error {
 		g.animTick = 0
 		g.animFrame = (g.animFrame + 1) % len(g.dinoFrames)
 
-		// for _, b := range g.birds {
-		// 	b.img = g.birdFrames[g.animFrame%len(g.birdFrames)]
-		// }
+		for i := range g.birds {
+			b := &g.birds[i]
+			b.img = g.birdFrames[rand.Intn(len(g.birdFrames))]
+		}
 	}
 
 	return nil
