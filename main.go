@@ -34,11 +34,14 @@ type Game struct {
 	birdSpawnTick       int
 	birdOscillationTime float64
 
-	dinoFrames   []*ebiten.Image
-	cactusFrames []*ebiten.Image
-	birdFrames   []*ebiten.Image
-	animFrame    int
-	animTick     int
+	dinoStandFrames   []*ebiten.Image
+	dinoRunningFrames []*ebiten.Image
+	dinoDeadFrames    []*ebiten.Image
+	dinoDuckFrames    []*ebiten.Image
+	cactusFrames      []*ebiten.Image
+	birdFrames        []*ebiten.Image
+	animFrame         int
+	animTick          int
 
 	groundFrame *ebiten.Image
 	groundX     float64
@@ -88,12 +91,19 @@ const (
 )
 
 func (g *Game) Update() error {
+	g.animTick++
+
 	if g.gameOver {
+		if g.animTick >= 10 {
+			g.animTick = 0
+			g.animFrame = (g.animFrame + 1) % len(g.dinoDeadFrames)
+		}
 		if ebiten.IsKeyPressed(ebiten.KeyR) {
 			g.playerX = 100
 			g.playerY = float64(screenHeight - groundHeight - playerHeight)
 			g.vy = 0
 			g.onGround = true
+			g.animFrame = 0
 			g.jumpCount = 0
 			g.cactuses = nil
 			g.cactusSpawnTick = 0
@@ -233,10 +243,9 @@ func (g *Game) Update() error {
 	}
 	g.birds = newBirds
 
-	g.animTick++
 	if g.animTick >= 10 {
 		g.animTick = 0
-		g.animFrame = (g.animFrame + 1) % len(g.dinoFrames)
+		g.animFrame = (g.animFrame + 1) % len(g.dinoRunningFrames)
 
 		for i := range g.birds {
 			b := &g.birds[i]
@@ -267,7 +276,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// dino
 	drawDinoOpts := &ebiten.DrawImageOptions{}
 	drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
-	screen.DrawImage(g.dinoFrames[g.animFrame], drawDinoOpts)
+	if g.gameOver {
+		screen.DrawImage(g.dinoDeadFrames[g.animFrame%len(g.dinoDeadFrames)], drawDinoOpts)
+	} else {
+		screen.DrawImage(g.dinoRunningFrames[g.animFrame%len(g.dinoRunningFrames)], drawDinoOpts)
+	}
 
 	// obstacles
 	// cactuses
@@ -333,9 +346,21 @@ func main() {
 	groundFrame := sprite.SubImage(image.Rect(0, 104, 2404, 104+18)).(*ebiten.Image)
 
 	// dino
-	dinoFrames := []*ebiten.Image{
+	dinoStandFrames := []*ebiten.Image{
+		sprite.SubImage(image.Rect(1336, 0, 1336+88, 0+94)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(1425, 0, 1425+88, 0+94)).(*ebiten.Image),
+	}
+	dinoRunningFrames := []*ebiten.Image{
 		sprite.SubImage(image.Rect(1514, 0, 1514+88, 0+94)).(*ebiten.Image),
 		sprite.SubImage(image.Rect(1603, 0, 1603+88, 0+94)).(*ebiten.Image),
+	}
+	dinoDeadFrames := []*ebiten.Image{
+		sprite.SubImage(image.Rect(1692, 0, 1692+88, 0+94)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(1781, 0, 1781+88, 0+94)).(*ebiten.Image),
+	}
+	dinoDuckFrames := []*ebiten.Image{
+		sprite.SubImage(image.Rect(1866, 0, 1866+118, 0+94)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(1984, 0, 1984+118, 0+94)).(*ebiten.Image),
 	}
 
 	// obstacles
@@ -351,13 +376,16 @@ func main() {
 	}
 
 	game := &Game{
-		playerX:      100,
-		playerY:      float64(screenHeight - groundHeight - 94),
-		onGround:     true,
-		dinoFrames:   dinoFrames,
-		cactusFrames: cactusFrames,
-		birdFrames:   birdFrames,
-		groundFrame:  groundFrame,
+		playerX:           100,
+		playerY:           float64(screenHeight - groundHeight - 94),
+		onGround:          true,
+		dinoStandFrames:   dinoStandFrames,
+		dinoRunningFrames: dinoRunningFrames,
+		dinoDeadFrames:    dinoDeadFrames,
+		dinoDuckFrames:    dinoDuckFrames,
+		cactusFrames:      cactusFrames,
+		birdFrames:        birdFrames,
+		groundFrame:       groundFrame,
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
