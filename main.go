@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math"
 	"math/rand"
 	"os"
 
@@ -15,15 +16,15 @@ import (
 var gray = color.RGBA{0x88, 0x88, 0x88, 0xff}
 
 type Obstacle struct {
-	x   float32
-	y   float32
+	x   float64
+	y   float64
 	img *ebiten.Image
 }
 
 type Game struct {
-	playerX   float32
-	playerY   float32
-	vy        float32
+	playerX   float64
+	playerY   float64
+	vy        float64
 	jumpCount int
 	onGround  bool
 
@@ -35,6 +36,9 @@ type Game struct {
 	animFrame    int
 	animTick     int
 
+	groundFrame *ebiten.Image
+	groundX     float64
+
 	score     int
 	highScore int
 	gameOver  bool
@@ -42,7 +46,7 @@ type Game struct {
 	lastSpacePressed bool
 }
 
-func isColliding(ax, ay, aw, ah, am float32, bx, by, bw, bh, bm float32) bool {
+func isColliding(ax, ay, aw, ah, am float64, bx, by, bw, bh, bm float64) bool {
 	ax += am
 	ay += am
 	aw -= 2 * am
@@ -68,17 +72,19 @@ const (
 	playerWidth  = 88
 	playerHeight = 94
 
-	dinoMargin   = float32(20)
-	cactusMargin = float32(5)
+	dinoMargin   = float64(20)
+	cactusMargin = float64(5)
 
 	groundHeight = 100
+
+	gameSpeed = float64(5)
 )
 
 func (g *Game) Update() error {
 	if g.gameOver {
 		if ebiten.IsKeyPressed(ebiten.KeyR) {
 			g.playerX = 100
-			g.playerY = float32(screenHeight - groundHeight - playerHeight)
+			g.playerY = float64(screenHeight - groundHeight - playerHeight)
 			g.vy = 0
 			g.onGround = true
 			g.jumpCount = 0
@@ -106,7 +112,7 @@ func (g *Game) Update() error {
 
 	g.vy += 0.5
 	g.playerY += g.vy
-	groundY := float32(screenHeight - groundHeight - playerHeight)
+	groundY := float64(screenHeight - groundHeight - playerHeight)
 	if g.playerY >= groundY {
 		g.playerY = groundY
 		g.vy = 0
@@ -123,8 +129,8 @@ func (g *Game) Update() error {
 		h := img.Bounds().Dy()
 
 		ob := Obstacle{
-			x:   float32(screenWidth),
-			y:   float32(screenHeight - groundHeight - float32(h)),
+			x:   float64(screenWidth),
+			y:   float64(screenHeight - groundHeight - float64(h)),
 			img: img,
 		}
 		g.obstacles = append(g.obstacles, ob)
@@ -139,7 +145,7 @@ func (g *Game) Update() error {
 
 			if isColliding(
 				g.playerX, g.playerY, playerWidth, playerHeight, dinoMargin,
-				ob.x, ob.y, float32(w), float32(h), cactusMargin,
+				ob.x, ob.y, float64(w), float64(h), cactusMargin,
 			) {
 				if g.score > g.highScore {
 					g.highScore = g.score
@@ -154,13 +160,17 @@ func (g *Game) Update() error {
 		return nil
 	}
 
+	// move ground
+	g.groundX += gameSpeed
+	groundW := g.groundFrame.Bounds().Dx()
+	g.groundX = math.Mod(g.groundX, float64(groundW))
+
 	// move obstacles
-	speed := float32(5)
 	newObstacles := g.obstacles[:0]
 	for _, ob := range g.obstacles {
-		ob.x -= speed
+		ob.x -= gameSpeed
 		w := ob.img.Bounds().Dx()
-		if ob.x+float32(w) > 0 {
+		if ob.x+float64(w) > 0 {
 			newObstacles = append(newObstacles, ob)
 		}
 	}
@@ -180,7 +190,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.White)
 
 	// ground
-	drawRect(screen, 0, float32(screenHeight-groundHeight), float32(screenWidth), 2, color.Black)
+	groundY := float64(screenHeight - groundHeight - 18)
+	groundW := g.groundFrame.Bounds().Dx()
+	for i := 0; i < 2; i++ {
+		op := &ebiten.DrawImageOptions{}
+		offsetX := -g.groundX + float64(groundW*i)
+		if i == 1 {
+			offsetX -= 5 // fix the little gap
+		}
+		op.GeoM.Translate(offsetX, groundY)
+		screen.DrawImage(g.groundFrame, op)
+	}
 
 	// dino
 	drawDinoOpts := &ebiten.DrawImageOptions{}
@@ -219,15 +239,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 }
 
-func drawRect(dst *ebiten.Image, x, y, w, h float32, clr color.Color) {
-	rect := ebiten.NewImage(int(w), int(h))
-	rect.Fill(clr)
-
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(x), float64(y))
-	dst.DrawImage(rect, op)
-}
-
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return screenWidth, screenHeight
 }
@@ -249,6 +260,9 @@ func loadSprite(path string) *ebiten.Image {
 func main() {
 	sprite := loadSprite("assets/sprite.png")
 
+	// ground
+	groundFrame := sprite.SubImage(image.Rect(0, 104, 2404, 104+18)).(*ebiten.Image)
+
 	// dino
 	dinoFrames := []*ebiten.Image{
 		sprite.SubImage(image.Rect(1514, 0, 1514+88, 0+94)).(*ebiten.Image),
@@ -265,10 +279,11 @@ func main() {
 
 	game := &Game{
 		playerX:      100,
-		playerY:      float32(screenHeight - groundHeight - 94),
+		playerY:      float64(screenHeight - groundHeight - 94),
 		onGround:     true,
 		dinoFrames:   dinoFrames,
 		cactusFrames: cactusFrames,
+		groundFrame:  groundFrame,
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
