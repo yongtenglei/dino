@@ -29,10 +29,12 @@ type Game struct {
 	onGround  bool
 
 	cactuses  []Obstacle
+	birds     []Obstacle
 	spawnTick int
 
 	dinoFrames   []*ebiten.Image
 	cactusFrames []*ebiten.Image
+	birdFrames   []*ebiten.Image
 	animFrame    int
 	animTick     int
 
@@ -128,25 +130,54 @@ func (g *Game) Update() error {
 		img := g.cactusFrames[rand.Intn(len(g.cactusFrames))]
 		h := img.Bounds().Dy()
 
-		ob := Obstacle{
+		obcactus := Obstacle{
 			x:   float64(screenWidth),
 			y:   float64(screenHeight - groundHeight - float64(h)),
 			img: img,
 		}
-		g.cactuses = append(g.cactuses, ob)
+		g.cactuses = append(g.cactuses, obcactus)
 	}
 
-	// colliding
-	if !g.gameOver {
-		g.score++
+	// birds
+	if rand.Float64() < 0.01 { // x% per frame to generate a bird
+		img := g.birdFrames[rand.Intn(len(g.birdFrames))]
+		y := float64(screenHeight - groundHeight - playerHeight - rand.Intn(100) - 50)
 
-		for _, ob := range g.cactuses {
-			w, h := ob.img.Bounds().Dx(), ob.img.Bounds().Dy()
+		bird := Obstacle{
+			x:   float64(screenWidth),
+			y:   y,
+			img: img,
+		}
+		g.birds = append(g.birds, bird)
+	}
+
+	g.score++
+
+	// colliding
+	// cactuses
+	if !g.gameOver {
+		for _, c := range g.cactuses {
+			w, h := c.img.Bounds().Dx(), c.img.Bounds().Dy()
 
 			if isColliding(
 				g.playerX, g.playerY, playerWidth, playerHeight, dinoMargin,
-				ob.x, ob.y, float64(w), float64(h), cactusMargin,
+				c.x, c.y, float64(w), float64(h), cactusMargin,
 			) {
+				if g.score > g.highScore {
+					g.highScore = g.score
+				}
+				g.gameOver = true
+				break
+			}
+		}
+	}
+	// birds
+	if !g.gameOver {
+		for _, b := range g.birds {
+			w, h := b.img.Bounds().Dx(), b.img.Bounds().Dy()
+			if isColliding(
+				g.playerX, g.playerY, playerWidth, playerHeight, dinoMargin,
+				b.x, b.y, float64(w), float64(h), cactusMargin) {
 				if g.score > g.highScore {
 					g.highScore = g.score
 				}
@@ -166,20 +197,35 @@ func (g *Game) Update() error {
 	g.groundX = math.Mod(g.groundX, float64(groundW))
 
 	// move obstacles
-	newObstacles := g.cactuses[:0]
-	for _, ob := range g.cactuses {
-		ob.x -= gameSpeed
-		w := ob.img.Bounds().Dx()
-		if ob.x+float64(w) > 0 {
-			newObstacles = append(newObstacles, ob)
+	newCactuses := g.cactuses[:0]
+	for _, c := range g.cactuses {
+		c.x -= gameSpeed
+		w := c.img.Bounds().Dx()
+		if c.x+float64(w) > 0 {
+			newCactuses = append(newCactuses, c)
 		}
 	}
-	g.cactuses = newObstacles
+	g.cactuses = newCactuses
+
+	// move birds
+	newBirds := g.birds[:0]
+	for _, b := range g.birds {
+		b.x -= gameSpeed
+		w := b.img.Bounds().Dx()
+		if b.x+float64(w) > 0 {
+			newBirds = append(newBirds, b)
+		}
+	}
+	g.birds = newBirds
 
 	g.animTick++
 	if g.animTick >= 10 {
 		g.animTick = 0
 		g.animFrame = (g.animFrame + 1) % len(g.dinoFrames)
+
+		// for _, b := range g.birds {
+		// 	b.img = g.birdFrames[g.animFrame%len(g.birdFrames)]
+		// }
 	}
 
 	return nil
@@ -208,10 +254,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.DrawImage(g.dinoFrames[g.animFrame], drawDinoOpts)
 
 	// obstacles
-	for _, ob := range g.cactuses {
+	// cactuses
+	for _, c := range g.cactuses {
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(float64(ob.x), float64(ob.y))
-		screen.DrawImage(ob.img, op)
+		op.GeoM.Translate(float64(c.x), float64(c.y))
+		screen.DrawImage(c.img, op)
+	}
+	// birds
+	for _, b := range g.birds {
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(b.x, b.y)
+		screen.DrawImage(b.img, op)
 	}
 
 	// score
@@ -276,6 +329,10 @@ func main() {
 		sprite.SubImage(image.Rect(652, 2, 652+49, 2+100)).(*ebiten.Image),
 		sprite.SubImage(image.Rect(802, 2, 802+99, 2+100)).(*ebiten.Image),
 	}
+	birdFrames := []*ebiten.Image{
+		sprite.SubImage(image.Rect(260, 0, 260+93, 0+69)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(355, 0, 355+93, 0+69)).(*ebiten.Image),
+	}
 
 	game := &Game{
 		playerX:      100,
@@ -283,6 +340,7 @@ func main() {
 		onGround:     true,
 		dinoFrames:   dinoFrames,
 		cactusFrames: cactusFrames,
+		birdFrames:   birdFrames,
 		groundFrame:  groundFrame,
 	}
 
