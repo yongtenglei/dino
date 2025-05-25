@@ -28,7 +28,7 @@ type Game struct {
 	jumpCount int
 	onGround  bool
 
-	obstacles []Obstacle
+	cactuses  []Obstacle
 	spawnTick int
 
 	dinoFrames   []*ebiten.Image
@@ -88,7 +88,7 @@ func (g *Game) Update() error {
 			g.vy = 0
 			g.onGround = true
 			g.jumpCount = 0
-			g.obstacles = nil
+			g.cactuses = nil
 			g.spawnTick = 0
 			g.score = 0
 			g.gameOver = false
@@ -133,14 +133,14 @@ func (g *Game) Update() error {
 			y:   float64(screenHeight - groundHeight - float64(h)),
 			img: img,
 		}
-		g.obstacles = append(g.obstacles, ob)
+		g.cactuses = append(g.cactuses, ob)
 	}
 
 	// colliding
 	if !g.gameOver {
 		g.score++
 
-		for _, ob := range g.obstacles {
+		for _, ob := range g.cactuses {
 			w, h := ob.img.Bounds().Dx(), ob.img.Bounds().Dy()
 
 			if isColliding(
@@ -166,15 +166,15 @@ func (g *Game) Update() error {
 	g.groundX = math.Mod(g.groundX, float64(groundW))
 
 	// move obstacles
-	newObstacles := g.obstacles[:0]
-	for _, ob := range g.obstacles {
+	newObstacles := g.cactuses[:0]
+	for _, ob := range g.cactuses {
 		ob.x -= gameSpeed
 		w := ob.img.Bounds().Dx()
 		if ob.x+float64(w) > 0 {
 			newObstacles = append(newObstacles, ob)
 		}
 	}
-	g.obstacles = newObstacles
+	g.cactuses = newObstacles
 
 	g.animTick++
 	if g.animTick >= 10 {
@@ -208,7 +208,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.DrawImage(g.dinoFrames[g.animFrame], drawDinoOpts)
 
 	// obstacles
-	for _, ob := range g.obstacles {
+	for _, ob := range g.cactuses {
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(float64(ob.x), float64(ob.y))
 		screen.DrawImage(ob.img, op)
