@@ -46,9 +46,10 @@ type Game struct {
 	groundFrame *ebiten.Image
 	groundX     float64
 
-	score     int
-	highScore int
-	gameOver  bool
+	score       int
+	highScore   int
+	startScreen bool
+	gameOver    bool
 
 	lastSpacePressed bool
 }
@@ -92,6 +93,20 @@ const (
 
 func (g *Game) Update() error {
 	g.animTick++
+
+	if g.startScreen {
+		if g.animTick >= 10 {
+			g.animTick = 0
+			g.animFrame = (g.animFrame + 1) % len(g.dinoStandFrames)
+		}
+
+		if ebiten.IsKeyPressed(ebiten.KeySpace) {
+			g.startScreen = false
+			g.animFrame = 0
+			g.animTick = 0
+		}
+		return nil
+	}
 
 	if g.gameOver {
 		if g.animTick >= 10 {
@@ -273,6 +288,20 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		screen.DrawImage(g.groundFrame, op)
 	}
 
+	if g.startScreen {
+		drawDinoOpts := &ebiten.DrawImageOptions{}
+		drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
+		screen.DrawImage(g.dinoStandFrames[g.animFrame%len(g.dinoStandFrames)], drawDinoOpts)
+
+		face := text.NewGoXFace(basicfont.Face7x13)
+		drawStartOpts := &text.DrawOptions{}
+		drawStartOpts.GeoM.Translate(screenWidth/2-80, screenHeight/2)
+		drawStartOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, "Press SPACE to Start", face, drawStartOpts)
+
+		return
+	}
+
 	// dino
 	drawDinoOpts := &ebiten.DrawImageOptions{}
 	drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
@@ -386,6 +415,7 @@ func main() {
 		cactusFrames:      cactusFrames,
 		birdFrames:        birdFrames,
 		groundFrame:       groundFrame,
+		startScreen:       true,
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
