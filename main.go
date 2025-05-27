@@ -1,17 +1,22 @@
 package main
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
 	"image"
 	"image/color"
+	_ "image/png"
 	"math"
 	"math/rand"
-	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	text "github.com/hajimehoshi/ebiten/v2/text/v2"
 	"golang.org/x/image/font/basicfont"
 )
+
+//go:embed assets/sprite.png
+var spriteSheet []byte
 
 var gray = color.RGBA{0x88, 0x88, 0x88, 0xff}
 
@@ -354,14 +359,8 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return screenWidth, screenHeight
 }
 
-func loadSprite(path string) *ebiten.Image {
-	f, err := os.Open(path)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	img, _, err := image.Decode(f)
+func loadSprite() *ebiten.Image {
+	img, _, err := image.Decode(bytes.NewReader(spriteSheet))
 	if err != nil {
 		panic(err)
 	}
@@ -369,7 +368,7 @@ func loadSprite(path string) *ebiten.Image {
 }
 
 func main() {
-	sprite := loadSprite("assets/sprite.png")
+	sprite := loadSprite()
 
 	// ground
 	groundFrame := sprite.SubImage(image.Rect(0, 104, 2404, 104+18)).(*ebiten.Image)
