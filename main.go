@@ -11,12 +11,23 @@ import (
 	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 	text "github.com/hajimehoshi/ebiten/v2/text/v2"
 	"golang.org/x/image/font/basicfont"
 )
 
 //go:embed assets/sprite.png
 var spriteSheet []byte
+
+//go:embed assets/jump.wav
+var jumpWav []byte
+
+//go:embed assets/die.wav
+var dieWav []byte
+
+//go:embed assets/point.wav
+var pointWav []byte
 
 var gray = color.RGBA{0x88, 0x88, 0x88, 0xff}
 
@@ -57,6 +68,11 @@ type Game struct {
 	gameOver    bool
 
 	lastSpacePressed bool
+
+	audioContext *audio.Context
+	jumpPlayer   *audio.Player
+	diePlayer    *audio.Player
+	pointPlayer  *audio.Player
 }
 
 func isColliding(ax, ay, aw, ah, am float64, bx, by, bw, bh, bm float64) bool {
@@ -94,6 +110,8 @@ const (
 	groundHeight = 100
 
 	gameSpeed = float64(5)
+
+	sampleRate = 44100
 )
 
 func (g *Game) Update() error {
@@ -145,6 +163,8 @@ func (g *Game) Update() error {
 			g.vy = -9
 		}
 		g.jumpCount++
+		g.jumpPlayer.Rewind()
+		g.jumpPlayer.Play()
 	}
 	g.lastSpacePressed = spaceNow
 
@@ -193,6 +213,10 @@ func (g *Game) Update() error {
 	}
 
 	g.score++
+	if g.score%1000 == 0 {
+		g.pointPlayer.Rewind()
+		g.pointPlayer.Play()
+	}
 
 	// colliding
 	// cactus
@@ -229,6 +253,8 @@ func (g *Game) Update() error {
 	}
 
 	if g.gameOver {
+		g.diePlayer.Rewind()
+		g.diePlayer.Play()
 		return nil
 	}
 
@@ -367,8 +393,26 @@ func loadSprite() *ebiten.Image {
 	return ebiten.NewImageFromImage(img)
 }
 
+func loadSoundTrack(audioCtx *audio.Context, sampleRate int, blob *bytes.Reader) *audio.Player {
+	stream, err := wav.DecodeWithSampleRate(sampleRate, blob)
+	if err != nil {
+		panic(err)
+	}
+	player, err := audioCtx.NewPlayer(stream)
+	if err != nil {
+		panic(err)
+	}
+	return player
+}
+
 func main() {
 	sprite := loadSprite()
+
+	// sound track
+	audioCtx := audio.NewContext(sampleRate)
+	jumpSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(jumpWav))
+	dieSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(dieWav))
+	pointSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(pointWav))
 
 	// ground
 	groundFrame := sprite.SubImage(image.Rect(0, 104, 2404, 104+18)).(*ebiten.Image)
@@ -415,6 +459,11 @@ func main() {
 		birdFrames:        birdFrames,
 		groundFrame:       groundFrame,
 		startScreen:       true,
+
+		audioContext: audioCtx,
+		jumpPlayer:   jumpSoundPlayer,
+		diePlayer:    dieSoundPlayer,
+		pointPlayer:  pointSoundPlayer,
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
