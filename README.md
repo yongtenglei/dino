@@ -22,6 +22,6 @@ The sprites are from [loparcog/chrome-dinosaur](https://github.com/loparcog/chro
 ## TODOs
 
 - [ ] Running soundtrack 🏃‍♂️‍➡️
-- [ ] Clouds in the air ☁️
+- [x] Clouds in the air ☁️
 - [ ] Better experience 🎲
 - [ ] Duck Dino 🦖

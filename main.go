@@ -62,6 +62,9 @@ type Game struct {
 	groundFrame *ebiten.Image
 	groundX     float64
 
+	cloudFrame *ebiten.Image
+	clouds     []Obstacle
+
 	score       int
 	highScore   int
 	startScreen bool
@@ -107,6 +110,9 @@ const (
 	minBirdOffset = 100
 	maxBirdOffset = 180
 
+	maxCloudsNum     = 4
+	minCloudDistance = 160.0
+
 	groundHeight = 100
 
 	gameSpeed = float64(5)
@@ -116,6 +122,44 @@ const (
 
 func (g *Game) Update() error {
 	g.animTick++
+
+	// clouds
+	if len(g.clouds) < maxCloudsNum && rand.Intn(100) < 1 {
+		newCloud := Obstacle{
+			x:   float64(screenWidth + rand.Intn(100)),
+			y:   float64(20 + rand.Intn(100)),
+			img: g.cloudFrame,
+		}
+
+		cloudW := float64(newCloud.img.Bounds().Dx())
+		cloudH := float64(newCloud.img.Bounds().Dy())
+
+		tooClose := false
+		for _, c := range g.clouds {
+			// center distance
+			dx := (newCloud.x + cloudW/2) - (c.x + cloudW/2)
+			dy := (newCloud.y + cloudH/2) - (c.y + cloudH/2)
+			distance := math.Hypot(dx, dy)
+
+			if distance < minCloudDistance {
+				tooClose = true
+				break
+			}
+		}
+
+		if !tooClose {
+			g.clouds = append(g.clouds, newCloud)
+		}
+	}
+
+	newClouds := g.clouds[:0]
+	for _, cloud := range g.clouds {
+		cloud.x -= gameSpeed * 0.3
+		if cloud.x+float64(g.cloudFrame.Bounds().Dx()) > 0 {
+			newClouds = append(newClouds, cloud)
+		}
+	}
+	g.clouds = newClouds
 
 	if g.startScreen {
 		if g.animTick >= 10 {
@@ -319,6 +363,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		screen.DrawImage(g.groundFrame, op)
 	}
 
+	// clouds
+	for _, cloud := range g.clouds {
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(cloud.x, cloud.y)
+		screen.DrawImage(g.cloudFrame, op)
+	}
+
 	if g.startScreen {
 		drawDinoOpts := &ebiten.DrawImageOptions{}
 		drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
@@ -417,6 +468,9 @@ func main() {
 	// ground
 	groundFrame := sprite.SubImage(image.Rect(0, 104, 2404, 104+18)).(*ebiten.Image)
 
+	// cloud
+	cloudFrame := sprite.SubImage(image.Rect(170, 0, 170+90, 0+30)).(*ebiten.Image)
+
 	// dino
 	dinoStandFrames := []*ebiten.Image{
 		sprite.SubImage(image.Rect(1336, 0, 1336+88, 0+94)).(*ebiten.Image),
@@ -458,6 +512,7 @@ func main() {
 		cactusFrames:      cactusFrames,
 		birdFrames:        birdFrames,
 		groundFrame:       groundFrame,
+		cloudFrame:        cloudFrame,
 		startScreen:       true,
 
 		audioContext: audioCtx,
