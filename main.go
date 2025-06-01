@@ -46,6 +46,7 @@ type Game struct {
 	vy        float64
 	jumpCount int
 	onGround  bool
+	isDucking bool
 
 	cactuses            []Obstacle
 	birds               []Obstacle
@@ -105,14 +106,18 @@ const (
 	screenWidth  = 800
 	screenHeight = 600
 
-	playerWidth  = 88
-	playerHeight = 94
+	dinoRunningWidth  = 88
+	dinoRunningHeight = 94
+	dinoDuckingWidth  = 118
+	dinoDuckingHeight = 60
 
-	dinoMargin   = float64(20)
-	cactusMargin = float64(5)
+	dinoMargin     = float64(20)
+	obstacleMargin = float64(5)
 
 	minBirdOffset = 100
 	maxBirdOffset = 180
+
+	duckYOffset = 34
 
 	maxCloudsNum     = 4
 	minCloudDistance = 160.0
@@ -186,7 +191,7 @@ func (g *Game) Update() error {
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyR) {
 			g.playerX = 100
-			g.playerY = float64(screenHeight - groundHeight - playerHeight)
+			g.playerY = float64(screenHeight - groundHeight - dinoRunningHeight)
 			g.vy = 0
 			g.onGround = true
 			g.animFrame = 0
@@ -224,13 +229,15 @@ func (g *Game) Update() error {
 
 	g.vy += 0.5
 	g.playerY += g.vy
-	groundY := float64(screenHeight - groundHeight - playerHeight)
+	groundY := float64(screenHeight - groundHeight - dinoRunningHeight)
 	if g.playerY >= groundY {
 		g.playerY = groundY
 		g.vy = 0
 		g.onGround = true
 		g.jumpCount = 0
 	}
+
+	g.isDucking = ebiten.IsKeyPressed(ebiten.KeyDown)
 
 	// obstacles
 	// cactus
@@ -256,7 +263,7 @@ func (g *Game) Update() error {
 
 		img := g.birdFrames[rand.Intn(len(g.birdFrames))]
 		randOffset := float64(rand.Intn(maxBirdOffset-minBirdOffset)) + minBirdOffset
-		y := float64(screenHeight - groundHeight - playerHeight - randOffset)
+		y := float64(screenHeight - groundHeight - dinoRunningHeight - randOffset)
 
 		bird := Obstacle{
 			x:   float64(screenWidth),
@@ -278,9 +285,18 @@ func (g *Game) Update() error {
 		for _, c := range g.cactuses {
 			w, h := c.img.Bounds().Dx(), c.img.Bounds().Dy()
 
+			dinoX := g.playerX
+			dinoY := g.playerY
+			dinoW := dinoRunningWidth
+			dinoH := dinoRunningHeight
+			if g.isDucking {
+				dinoY = dinoY + duckYOffset
+				dinoW = dinoDuckingWidth
+				dinoH = dinoDuckingHeight
+			}
 			if isColliding(
-				g.playerX, g.playerY, playerWidth, playerHeight, dinoMargin,
-				c.x, c.y, float64(w), float64(h), cactusMargin,
+				dinoX, dinoY, float64(dinoW), float64(dinoH), dinoMargin,
+				c.x, c.y, float64(w), float64(h), obstacleMargin,
 			) {
 				if g.score > g.highScore {
 					g.highScore = g.score
@@ -294,9 +310,19 @@ func (g *Game) Update() error {
 	if !g.gameOver {
 		for _, b := range g.birds {
 			w, h := b.img.Bounds().Dx(), b.img.Bounds().Dy()
+
+			dinoX := g.playerX
+			dinoY := g.playerY
+			dinoW := dinoRunningWidth
+			dinoH := dinoRunningHeight
+			if g.isDucking {
+				dinoY = dinoY + duckYOffset
+				dinoW = dinoDuckingWidth
+				dinoH = dinoDuckingHeight
+			}
 			if isColliding(
-				g.playerX, g.playerY, playerWidth, playerHeight, dinoMargin,
-				b.x, b.y, float64(w), float64(h), cactusMargin) {
+				dinoX, dinoY, float64(dinoW), float64(dinoH), dinoMargin,
+				b.x, b.y, float64(w), float64(h), obstacleMargin) {
 				if g.score > g.highScore {
 					g.highScore = g.score
 				}
@@ -408,6 +434,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
 	if g.gameOver {
 		screen.DrawImage(g.dinoDeadFrames[g.animFrame%len(g.dinoDeadFrames)], drawDinoOpts)
+	} else if g.isDucking {
+		drawDinoOpts.GeoM.Translate(0, duckYOffset)
+		screen.DrawImage(g.dinoDuckFrames[g.animFrame%len(g.dinoDuckFrames)], drawDinoOpts)
 	} else {
 		screen.DrawImage(g.dinoRunningFrames[g.animFrame%len(g.dinoRunningFrames)], drawDinoOpts)
 	}
@@ -505,8 +534,8 @@ func main() {
 		sprite.SubImage(image.Rect(1781, 0, 1781+88, 0+94)).(*ebiten.Image),
 	}
 	dinoDuckFrames := []*ebiten.Image{
-		sprite.SubImage(image.Rect(1866, 0, 1866+118, 0+94)).(*ebiten.Image),
-		sprite.SubImage(image.Rect(1984, 0, 1984+118, 0+94)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(1866, 34, 1866+118, 34+60)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(1984, 34, 1984+118, 34+60)).(*ebiten.Image),
 	}
 
 	// obstacles
