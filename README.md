@@ -1,4 +1,4 @@
-# Dino
+# 🦖 Dino
 
 <p align="center">
   <img src="./assets/bigme.png" alt="bigme" width="300">
@@ -33,7 +33,30 @@ output_path = "./assets/run.wav"
 wavfile.write(output_path, sample_rate, audio_data)
 ```
 
-## Demo
+## ✨ Features
+
+1. 🦖 Double Jump:
+
+   Dino’s mighty legs let it leap once more while airborne — because why not jump twice? 🕊️🦵💨
+
+1. 🐊 Duck Dino:
+
+   When danger flies high, go low. Ducking lets Dino dodge those pesky birds. 🐦⬇️
+
+1. 😮‍💨 Be Nice to Dino:
+
+   Crawling is exhausting! After 3 seconds of ducking, Dino needs to stand up and catch a breath. 🛌⏱️
+
+1. 🧠 Vim Mode:
+
+   Real pros use K to jump (instead of Space) and J to duck (instead of Down).
+   Old habits die hard — muscle memory, engage! 🎮⌨️💪
+
+1. 🏃‍♂️ Run Harder, Die Slower (WIP)
+   Earn a revive every 1000 points 🏃‍♂️💨🛡️
+   Because Dino deserves it. 😤🦖✨
+
+## 🎮 Demo
 
 [demo](./assets/demo.mp4)
 
@@ -49,4 +72,5 @@ wavfile.write(output_path, sample_rate, audio_data)
 - [x] Clouds in the air ☁️
 - [ ] Better experience 🎲
 - [x] Duck Dino 🦖
-- [x]  Vim mode 
+- [x] Vim mode ⌨️
+- [ ] Run for Dino 🏃‍♂️

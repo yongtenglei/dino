@@ -41,12 +41,13 @@ type Obstacle struct {
 }
 
 type Game struct {
-	playerX   float64
-	playerY   float64
-	vy        float64
-	jumpCount int
-	onGround  bool
-	isDucking bool
+	playerX      float64
+	playerY      float64
+	vy           float64
+	jumpCount    int
+	onGround     bool
+	isDucking    bool
+	duckDuration float64
 
 	cactuses            []Obstacle
 	birds               []Obstacle
@@ -74,7 +75,8 @@ type Game struct {
 	startScreen bool
 	gameOver    bool
 
-	lastSpacePressed bool
+	lastJumpKeyPressed bool
+	lastDuckKeyPressed bool
 
 	audioContext *audio.Context
 	jumpPlayer   *audio.Player
@@ -109,7 +111,8 @@ func isDuckKeyPressed() bool {
 }
 
 const (
-	maxjumpCount = 2
+	maxjumpCount    = 2
+	maxDuckDuration = 3.0 // 3s for 60 FPS
 
 	screenWidth  = 800
 	screenHeight = 600
@@ -217,7 +220,7 @@ func (g *Game) Update() error {
 
 	// jump
 	jumpNow := isJumpKeyPressed()
-	if jumpNow && !g.lastSpacePressed && g.jumpCount < maxjumpCount {
+	if jumpNow && !g.lastJumpKeyPressed && g.jumpCount < maxjumpCount {
 		g.onGround = false
 
 		if g.runPlayer.IsPlaying() {
@@ -233,7 +236,7 @@ func (g *Game) Update() error {
 		_ = g.jumpPlayer.Rewind()
 		g.jumpPlayer.Play()
 	}
-	g.lastSpacePressed = jumpNow
+	g.lastJumpKeyPressed = jumpNow
 
 	g.vy += 0.5
 	g.playerY += g.vy
@@ -245,7 +248,19 @@ func (g *Game) Update() error {
 		g.jumpCount = 0
 	}
 
-	g.isDucking = isDuckKeyPressed()
+	duckNow := isDuckKeyPressed()
+	if duckNow && g.lastDuckKeyPressed {
+		g.duckDuration += 1.0 / 60.0
+		if g.duckDuration <= maxDuckDuration {
+			g.isDucking = true
+		} else {
+			g.isDucking = false
+		}
+	} else {
+		g.isDucking = false
+		g.duckDuration = 0
+	}
+	g.lastDuckKeyPressed = duckNow
 
 	// obstacles
 	// cactus
@@ -478,6 +493,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	drawHighScoreOpts.GeoM.Translate(10, 40)
 	drawHighScoreOpts.ColorScale.ScaleWithColor(gray)
 	text.Draw(screen, highScoreText, face, drawHighScoreOpts)
+
+	// duck hint
+	if g.isDucking {
+		hint := max(3.0-g.duckDuration, 0)
+		duckHintText := fmt.Sprintf("Duck timeout: %.1fs", hint)
+		drawDuckHintOpts := &text.DrawOptions{}
+		drawDuckHintOpts.GeoM.Translate(10, 60)
+		drawDuckHintOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, duckHintText, face, drawDuckHintOpts)
+	}
 
 	if g.gameOver {
 		drawGameOverOpts := &text.DrawOptions{}
