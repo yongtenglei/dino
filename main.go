@@ -100,6 +100,14 @@ func isColliding(ax, ay, aw, ah, am float64, bx, by, bw, bh, bm float64) bool {
 		ay+ah > by
 }
 
+func isJumpKeyPressed() bool {
+	return ebiten.IsKeyPressed(ebiten.KeySpace) || ebiten.IsKeyPressed(ebiten.KeyK)
+}
+
+func isDuckKeyPressed() bool {
+	return ebiten.IsKeyPressed(ebiten.KeyDown) || ebiten.IsKeyPressed(ebiten.KeyJ)
+}
+
 const (
 	maxjumpCount = 2
 
@@ -208,8 +216,8 @@ func (g *Game) Update() error {
 	}
 
 	// jump
-	spaceNow := ebiten.IsKeyPressed(ebiten.KeySpace)
-	if spaceNow && !g.lastSpacePressed && g.jumpCount < maxjumpCount {
+	jumpNow := isJumpKeyPressed()
+	if jumpNow && !g.lastSpacePressed && g.jumpCount < maxjumpCount {
 		g.onGround = false
 
 		if g.runPlayer.IsPlaying() {
@@ -225,7 +233,7 @@ func (g *Game) Update() error {
 		_ = g.jumpPlayer.Rewind()
 		g.jumpPlayer.Play()
 	}
-	g.lastSpacePressed = spaceNow
+	g.lastSpacePressed = jumpNow
 
 	g.vy += 0.5
 	g.playerY += g.vy
@@ -237,7 +245,7 @@ func (g *Game) Update() error {
 		g.jumpCount = 0
 	}
 
-	g.isDucking = ebiten.IsKeyPressed(ebiten.KeyDown)
+	g.isDucking = isDuckKeyPressed()
 
 	// obstacles
 	// cactus

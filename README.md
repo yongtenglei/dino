@@ -49,4 +49,4 @@ wavfile.write(output_path, sample_rate, audio_data)
 - [x] Clouds in the air ☁️
 - [ ] Better experience 🎲
 - [x] Duck Dino 🦖
-- [ ]  Vim mode 
+- [x]  Vim mode 
