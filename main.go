@@ -29,6 +29,9 @@ var dieWav []byte
 //go:embed assets/point.wav
 var pointWav []byte
 
+//go:embed assets/run.wav
+var runWav []byte
+
 var gray = color.RGBA{0x88, 0x88, 0x88, 0xff}
 
 type Obstacle struct {
@@ -76,6 +79,7 @@ type Game struct {
 	jumpPlayer   *audio.Player
 	diePlayer    *audio.Player
 	pointPlayer  *audio.Player
+	runPlayer    *audio.Player
 }
 
 func isColliding(ax, ay, aw, ah, am float64, bx, by, bw, bh, bm float64) bool {
@@ -201,13 +205,19 @@ func (g *Game) Update() error {
 	// jump
 	spaceNow := ebiten.IsKeyPressed(ebiten.KeySpace)
 	if spaceNow && !g.lastSpacePressed && g.jumpCount < maxjumpCount {
+		g.onGround = false
+
+		if g.runPlayer.IsPlaying() {
+			g.runPlayer.Pause()
+		}
+
 		if g.jumpCount == 0 {
 			g.vy = -10
 		} else {
 			g.vy = -9
 		}
 		g.jumpCount++
-		g.jumpPlayer.Rewind()
+		_ = g.jumpPlayer.Rewind()
 		g.jumpPlayer.Play()
 	}
 	g.lastSpacePressed = spaceNow
@@ -258,7 +268,7 @@ func (g *Game) Update() error {
 
 	g.score++
 	if g.score%1000 == 0 {
-		g.pointPlayer.Rewind()
+		_ = g.pointPlayer.Rewind()
 		g.pointPlayer.Play()
 	}
 
@@ -297,7 +307,11 @@ func (g *Game) Update() error {
 	}
 
 	if g.gameOver {
-		g.diePlayer.Rewind()
+		if g.runPlayer.IsPlaying() {
+			g.runPlayer.Pause()
+		}
+
+		_ = g.diePlayer.Rewind()
 		g.diePlayer.Play()
 		return nil
 	}
@@ -336,6 +350,11 @@ func (g *Game) Update() error {
 	if g.animTick >= 10 {
 		g.animTick = 0
 		g.animFrame = (g.animFrame + 1) % len(g.dinoRunningFrames)
+
+		if g.onGround {
+			_ = g.runPlayer.Rewind()
+			g.runPlayer.Play()
+		}
 
 		for i := range g.birds {
 			b := &g.birds[i]
@@ -464,6 +483,7 @@ func main() {
 	jumpSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(jumpWav))
 	dieSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(dieWav))
 	pointSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(pointWav))
+	runSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(runWav))
 
 	// ground
 	groundFrame := sprite.SubImage(image.Rect(0, 104, 2404, 104+18)).(*ebiten.Image)
@@ -519,6 +539,7 @@ func main() {
 		jumpPlayer:   jumpSoundPlayer,
 		diePlayer:    dieSoundPlayer,
 		pointPlayer:  pointSoundPlayer,
+		runPlayer:    runSoundPlayer,
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
