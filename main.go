@@ -79,8 +79,13 @@ type Game struct {
 	gameOver    bool
 	hasShield   bool
 
-	lastJumpKeyPressed bool
-	lastDuckKeyPressed bool
+	shieldReadyFramesLeft int
+	shieldReadyBlinkTick  int
+	shieldReadyVisible    bool
+
+	lastJumpKeyPressed    bool
+	lastDuckKeyPressed    bool
+	lastRestartKeyPressed bool
 
 	audioContext *audio.Context
 	jumpPlayer   *audio.Player
@@ -118,6 +123,9 @@ func isDuckKeyPressed() bool {
 const (
 	maxjumpCount    = 2
 	maxDuckDuration = 3.0 // 3s for 60 FPS
+
+	shieldReadyDurationFrames = 90
+	shieldReadyBlinkFrames    = 12
 
 	screenWidth  = 800
 	screenHeight = 600
@@ -205,7 +213,9 @@ func (g *Game) Update() error {
 			g.animTick = 0
 			g.animFrame = (g.animFrame + 1) % len(g.dinoDeadFrames)
 		}
-		if ebiten.IsKeyPressed(ebiten.KeyR) {
+
+		restartNow := ebiten.IsKeyPressed(ebiten.KeyR) || ebiten.IsKeyPressed(ebiten.KeySpace)
+		if restartNow && !g.lastRestartKeyPressed {
 			g.playerX = 100
 			g.playerY = float64(screenHeight - groundHeight - dinoRunningHeight)
 			g.vy = 0
@@ -217,11 +227,27 @@ func (g *Game) Update() error {
 			g.birdSpawnTick = 0
 			g.score = 0
 			g.hasShield = false
+			g.shieldReadyFramesLeft = 0
+			g.shieldReadyBlinkTick = 0
+			g.shieldReadyVisible = false
 			g.gameOver = false
+			g.lastRestartKeyPressed = false
 			return nil
-
 		}
+		g.lastRestartKeyPressed = restartNow
 		return nil
+	}
+
+	if g.shieldReadyFramesLeft > 0 {
+		g.shieldReadyFramesLeft--
+		g.shieldReadyBlinkTick++
+		if g.shieldReadyBlinkTick >= shieldReadyBlinkFrames {
+			g.shieldReadyBlinkTick = 0
+			g.shieldReadyVisible = !g.shieldReadyVisible
+		}
+	} else if g.shieldReadyVisible {
+		g.shieldReadyVisible = false
+		g.shieldReadyBlinkTick = 0
 	}
 
 	// jump
@@ -291,7 +317,17 @@ func (g *Game) Update() error {
 		g.birdSpawnTick = 0
 
 		img := g.birdFrames[rand.Intn(len(g.birdFrames))]
-		randOffset := float64(rand.Intn(maxBirdOffset-minBirdOffset)) + minBirdOffset
+
+		minOffset := minBirdOffset
+		if len(g.cactuses) > 0 {
+			lastCactus := g.cactuses[len(g.cactuses)-1]
+			cactusHeight := lastCactus.img.Bounds().Dy()
+			if cactusHeight >= 100 {
+				minOffset = 160
+			}
+		}
+
+		randOffset := float64(rand.Intn(maxBirdOffset-minOffset)) + float64(minOffset)
 		y := float64(screenHeight - groundHeight - dinoRunningHeight - randOffset)
 
 		bird := Obstacle{
@@ -303,6 +339,9 @@ func (g *Game) Update() error {
 	}
 
 	g.score++
+	if g.score > g.highScore {
+		g.highScore = g.score
+	}
 	if g.score%1000 == 0 {
 		_ = g.pointPlayer.Rewind()
 		g.pointPlayer.Play()
@@ -310,6 +349,9 @@ func (g *Game) Update() error {
 
 	if g.score >= 1100 && (g.score-1100)%1000 == 0 && !g.hasShield {
 		g.hasShield = true
+		g.shieldReadyFramesLeft = shieldReadyDurationFrames
+		g.shieldReadyBlinkTick = 0
+		g.shieldReadyVisible = true
 		_ = g.shieldPlayer.Rewind()
 		g.shieldPlayer.Play()
 	}
@@ -330,9 +372,15 @@ func (g *Game) Update() error {
 				dinoW = dinoDuckingWidth
 				dinoH = dinoDuckingHeight
 			}
+
+			margin := obstacleMargin
+			if w > 100 {
+				margin = 40
+			}
+
 			if isColliding(
 				dinoX, dinoY, float64(dinoW), float64(dinoH), dinoMargin,
-				c.x, c.y, float64(w), float64(h), obstacleMargin,
+				c.x, c.y, float64(w), float64(h), margin,
 			) {
 				if g.score > g.highScore {
 					g.highScore = g.score
@@ -344,6 +392,7 @@ func (g *Game) Update() error {
 					continue
 				}
 				g.gameOver = true
+				g.lastRestartKeyPressed = ebiten.IsKeyPressed(ebiten.KeyR) || ebiten.IsKeyPressed(ebiten.KeySpace)
 				break
 			}
 		}
@@ -376,6 +425,7 @@ func (g *Game) Update() error {
 					continue
 				}
 				g.gameOver = true
+				g.lastRestartKeyPressed = ebiten.IsKeyPressed(ebiten.KeyR) || ebiten.IsKeyPressed(ebiten.KeySpace)
 				break
 			}
 		}
@@ -465,15 +515,51 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	if g.startScreen {
+		screen.Fill(color.RGBA{0x30, 0x30, 0x40, 0xff})
+
 		drawDinoOpts := &ebiten.DrawImageOptions{}
 		drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
 		screen.DrawImage(g.dinoStandFrames[g.animFrame%len(g.dinoStandFrames)], drawDinoOpts)
 
 		face := text.NewGoXFace(basicfont.Face7x13)
-		drawStartOpts := &text.DrawOptions{}
-		drawStartOpts.GeoM.Translate(screenWidth/2-80, screenHeight/2)
-		drawStartOpts.ColorScale.ScaleWithColor(gray)
-		text.Draw(screen, "Press SPACE to Start", face, drawStartOpts)
+
+		startX := float64(screenWidth / 2)
+		asciiY := float64(screenHeight/2 - 140)
+
+		dinoASCII := []string{
+			"    ____     ____   _   __   ____ ",
+			"   / __ \\   /  _/  / | / /  / __ \\",
+			"  / / / /   / /   /  |/ /  / / / /",
+			" / /_/ /  _/ /   / /|  /  / /_/ / ",
+			"/_____/  /___/  /_/ |_/   \\____/  ",
+			"                                 ",
+		}
+
+		for i, line := range dinoASCII {
+			lineX := startX - float64(len(line)*7/2)
+			drawLine := &text.DrawOptions{}
+			drawLine.GeoM.Translate(lineX, asciiY+float64(i*13))
+			drawLine.ColorScale.ScaleWithColor(color.White)
+			text.Draw(screen, line, face, drawLine)
+		}
+
+		startY := float64(screenHeight/2 - 30)
+
+		titleText := "Press SPACE to Start"
+		titleX := startX - float64(len(titleText)*7/2)
+
+		drawTitle := &text.DrawOptions{}
+		drawTitle.GeoM.Translate(titleX, startY)
+		drawTitle.ColorScale.ScaleWithColor(color.White)
+		text.Draw(screen, titleText, face, drawTitle)
+
+		instructionText := "SPACE/K: Jump | DOWN/J: Duck"
+		instructionX := startX - float64(len(instructionText)*7/2)
+
+		drawInstruction := &text.DrawOptions{}
+		drawInstruction.GeoM.Translate(instructionX, startY+30)
+		drawInstruction.ColorScale.ScaleWithColor(color.White)
+		text.Draw(screen, instructionText, face, drawInstruction)
 
 		return
 	}
@@ -488,6 +574,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	} else if g.isDucking {
 		drawDinoOpts.GeoM.Translate(0, duckYOffset)
 		screen.DrawImage(g.dinoDuckFrames[g.animFrame%len(g.dinoDuckFrames)], drawDinoOpts)
+	} else if !g.onGround {
+		if g.vy < 0 {
+			screen.DrawImage(g.dinoStandFrames[g.animFrame%len(g.dinoStandFrames)], drawDinoOpts)
+		} else {
+			screen.DrawImage(g.dinoRunningFrames[g.animFrame%len(g.dinoRunningFrames)], drawDinoOpts)
+		}
 	} else {
 		screen.DrawImage(g.dinoRunningFrames[g.animFrame%len(g.dinoRunningFrames)], drawDinoOpts)
 	}
@@ -562,12 +654,35 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		text.Draw(screen, shieldText, face, drawShieldOpts)
 	}
 
+	if g.shieldReadyFramesLeft > 0 && g.shieldReadyVisible && !g.gameOver {
+		shieldReadyText := "SHIELD IS READY"
+		shieldReadyX := float64(screenWidth)/2 - float64(len(shieldReadyText)*7/2)
+		shieldReadyY := float64(screenHeight)/2 - 10
+		drawShieldReadyOpts := &text.DrawOptions{}
+		drawShieldReadyOpts.GeoM.Translate(shieldReadyX, shieldReadyY)
+		drawShieldReadyOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, shieldReadyText, face, drawShieldReadyOpts)
+	}
+
 	if g.gameOver {
+		red := color.RGBA{0xff, 0x00, 0x00, 0xff}
+
+		gameOverText := "GAME OVER"
+		gameOverX := float64(screenWidth)/2 - float64(len(gameOverText)*7/2)
+
 		drawGameOverOpts := &text.DrawOptions{}
-		drawGameOverOpts.GeoM.Translate(screenWidth/2-100, 60)
-		drawGameOverOpts.ColorScale.ScaleWithColor(gray)
-		msg := "GAME OVER - Press R to Restart"
-		text.Draw(screen, msg, face, drawGameOverOpts)
+		drawGameOverOpts.GeoM.Translate(gameOverX, 60)
+		drawGameOverOpts.ColorScale.ScaleWithColor(red)
+		text.Draw(screen, gameOverText, face, drawGameOverOpts)
+
+		restartY := float64(90)
+		restartText := "Press SPACE or R to Restart"
+		restartX := float64(screenWidth)/2 - float64(len(restartText)*7/2)
+
+		drawRestart := &text.DrawOptions{}
+		drawRestart.GeoM.Translate(restartX, restartY)
+		drawRestart.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, restartText, face, drawRestart)
 	}
 }
 
@@ -615,7 +730,7 @@ func main() {
 	// dino
 	dinoStandFrames := []*ebiten.Image{
 		sprite.SubImage(image.Rect(1336, 0, 1336+88, 0+94)).(*ebiten.Image),
-		sprite.SubImage(image.Rect(1425, 0, 1425+88, 0+94)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(1426, 0, 1425+88, 0+94)).(*ebiten.Image),
 	}
 	dinoRunningFrames := []*ebiten.Image{
 		sprite.SubImage(image.Rect(1514, 0, 1514+88, 0+94)).(*ebiten.Image),
@@ -635,7 +750,7 @@ func main() {
 		sprite.SubImage(image.Rect(446, 2, 446+34, 2+70)).(*ebiten.Image),
 		sprite.SubImage(image.Rect(548, 2, 548+68, 2+70)).(*ebiten.Image),
 		sprite.SubImage(image.Rect(652, 2, 652+49, 2+100)).(*ebiten.Image),
-		sprite.SubImage(image.Rect(802, 2, 802+99, 2+100)).(*ebiten.Image),
+		sprite.SubImage(image.Rect(752, 2, 752+199, 2+100)).(*ebiten.Image),
 	}
 	birdFrames := []*ebiten.Image{
 		sprite.SubImage(image.Rect(260, 0, 260+93, 0+69)).(*ebiten.Image),
@@ -654,6 +769,10 @@ func main() {
 		groundFrame:       groundFrame,
 		cloudFrame:        cloudFrame,
 		startScreen:       true,
+
+		lastJumpKeyPressed:    false,
+		lastDuckKeyPressed:    false,
+		lastRestartKeyPressed: false,
 
 		audioContext: audioCtx,
 		jumpPlayer:   jumpSoundPlayer,

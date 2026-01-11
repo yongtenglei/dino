@@ -97,7 +97,7 @@ with wave.open("./assets/shield.wav", "wb") as wf:
 
 - [x] Running soundtrack 🏃‍♂️‍➡️
 - [x] Clouds in the air ☁️
-- [ ] Better experience 🎲
+- [x] Better experience 🎲
 - [x] Duck Dino 🦖
 - [x] Vim mode ⌨️
 - [x] Run for Dino 🏃‍♂️
