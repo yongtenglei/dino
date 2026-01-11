@@ -32,6 +32,9 @@ var pointWav []byte
 //go:embed assets/run.wav
 var runWav []byte
 
+//go:embed assets/shield.wav
+var shieldWav []byte
+
 var gray = color.RGBA{0x88, 0x88, 0x88, 0xff}
 
 type Obstacle struct {
@@ -74,6 +77,7 @@ type Game struct {
 	highScore   int
 	startScreen bool
 	gameOver    bool
+	hasShield   bool
 
 	lastJumpKeyPressed bool
 	lastDuckKeyPressed bool
@@ -83,6 +87,7 @@ type Game struct {
 	diePlayer    *audio.Player
 	pointPlayer  *audio.Player
 	runPlayer    *audio.Player
+	shieldPlayer *audio.Player
 }
 
 func isColliding(ax, ay, aw, ah, am float64, bx, by, bw, bh, bm float64) bool {
@@ -211,6 +216,7 @@ func (g *Game) Update() error {
 			g.cactusSpawnTick = 0
 			g.birdSpawnTick = 0
 			g.score = 0
+			g.hasShield = false
 			g.gameOver = false
 			return nil
 
@@ -302,10 +308,17 @@ func (g *Game) Update() error {
 		g.pointPlayer.Play()
 	}
 
+	if g.score >= 1100 && (g.score-1100)%1000 == 0 && !g.hasShield {
+		g.hasShield = true
+		_ = g.shieldPlayer.Rewind()
+		g.shieldPlayer.Play()
+	}
+
 	// colliding
 	// cactus
 	if !g.gameOver {
-		for _, c := range g.cactuses {
+		for i := 0; i < len(g.cactuses); i++ {
+			c := g.cactuses[i]
 			w, h := c.img.Bounds().Dx(), c.img.Bounds().Dy()
 
 			dinoX := g.playerX
@@ -324,6 +337,12 @@ func (g *Game) Update() error {
 				if g.score > g.highScore {
 					g.highScore = g.score
 				}
+				if g.hasShield {
+					g.hasShield = false
+					g.cactuses = append(g.cactuses[:i], g.cactuses[i+1:]...)
+					i--
+					continue
+				}
 				g.gameOver = true
 				break
 			}
@@ -331,7 +350,8 @@ func (g *Game) Update() error {
 	}
 	// birds
 	if !g.gameOver {
-		for _, b := range g.birds {
+		for i := 0; i < len(g.birds); i++ {
+			b := g.birds[i]
 			w, h := b.img.Bounds().Dx(), b.img.Bounds().Dy()
 
 			dinoX := g.playerX
@@ -348,6 +368,12 @@ func (g *Game) Update() error {
 				b.x, b.y, float64(w), float64(h), obstacleMargin) {
 				if g.score > g.highScore {
 					g.highScore = g.score
+				}
+				if g.hasShield {
+					g.hasShield = false
+					g.birds = append(g.birds[:i], g.birds[i+1:]...)
+					i--
+					continue
 				}
 				g.gameOver = true
 				break
@@ -452,6 +478,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
+	face := text.NewGoXFace(basicfont.Face7x13)
+
 	// dino
 	drawDinoOpts := &ebiten.DrawImageOptions{}
 	drawDinoOpts.GeoM.Translate(float64(g.playerX), float64(g.playerY))
@@ -462,6 +490,30 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		screen.DrawImage(g.dinoDuckFrames[g.animFrame%len(g.dinoDuckFrames)], drawDinoOpts)
 	} else {
 		screen.DrawImage(g.dinoRunningFrames[g.animFrame%len(g.dinoRunningFrames)], drawDinoOpts)
+	}
+
+	if g.hasShield {
+		exclaimText := "!"
+		dinoX := g.playerX
+		dinoY := g.playerY
+		dinoW := dinoRunningWidth
+		dinoH := dinoRunningHeight
+		if g.isDucking {
+			dinoY = dinoY + duckYOffset
+			dinoW = dinoDuckingWidth
+			dinoH = dinoDuckingHeight
+		}
+		exclaimX := dinoX + float64(dinoW) + 6
+		exclaimY := dinoY + float64(dinoH)/2 - 6
+		exclaimOpts := &text.DrawOptions{}
+		exclaimOpts.GeoM.Translate(exclaimX, exclaimY)
+		exclaimOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, exclaimText, face, exclaimOpts)
+
+		exclaimBoldOpts := &text.DrawOptions{}
+		exclaimBoldOpts.GeoM.Translate(exclaimX+1, exclaimY)
+		exclaimBoldOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, exclaimText, face, exclaimBoldOpts)
 	}
 
 	// obstacles
@@ -482,8 +534,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	scoreText := fmt.Sprintf("Score: %d", g.score)
 	highScoreText := fmt.Sprintf("High Score: %d", g.highScore)
 
-	face := text.NewGoXFace(basicfont.Face7x13)
-
 	drawScoreOpts := &text.DrawOptions{}
 	drawScoreOpts.GeoM.Translate(10, 20)
 	drawScoreOpts.ColorScale.ScaleWithColor(gray)
@@ -502,6 +552,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		drawDuckHintOpts.GeoM.Translate(10, 60)
 		drawDuckHintOpts.ColorScale.ScaleWithColor(gray)
 		text.Draw(screen, duckHintText, face, drawDuckHintOpts)
+	}
+
+	if g.hasShield {
+		shieldText := "Shield: READY"
+		drawShieldOpts := &text.DrawOptions{}
+		drawShieldOpts.GeoM.Translate(10, 80)
+		drawShieldOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, shieldText, face, drawShieldOpts)
 	}
 
 	if g.gameOver {
@@ -546,6 +604,7 @@ func main() {
 	dieSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(dieWav))
 	pointSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(pointWav))
 	runSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(runWav))
+	shieldSoundPlayer := loadSoundTrack(audioCtx, sampleRate, bytes.NewReader(shieldWav))
 
 	// ground
 	groundFrame := sprite.SubImage(image.Rect(0, 104, 2404, 104+18)).(*ebiten.Image)
@@ -582,7 +641,6 @@ func main() {
 		sprite.SubImage(image.Rect(260, 0, 260+93, 0+69)).(*ebiten.Image),
 		sprite.SubImage(image.Rect(355, 0, 355+93, 0+69)).(*ebiten.Image),
 	}
-
 	game := &Game{
 		playerX:           100,
 		playerY:           float64(screenHeight - groundHeight - 94),
@@ -602,6 +660,7 @@ func main() {
 		diePlayer:    dieSoundPlayer,
 		pointPlayer:  pointSoundPlayer,
 		runPlayer:    runSoundPlayer,
+		shieldPlayer: shieldSoundPlayer,
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)

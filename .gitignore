@@ -69,7 +69,7 @@ $RECYCLE.BIN/
 .AppleDouble
 .LSOverride
 
-# Icon must end with two 
+# Icon must end with two
 Icon
 
 # Thumbnails
@@ -94,3 +94,4 @@ Temporary Items
 # iCloud generated files
 *.icloud
 
+./dino
