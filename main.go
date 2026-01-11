@@ -78,10 +78,14 @@ type Game struct {
 	startScreen bool
 	gameOver    bool
 	hasShield   bool
+	speedLevel   int
 
 	shieldReadyFramesLeft int
 	shieldReadyBlinkTick  int
 	shieldReadyVisible    bool
+	speedUpFramesLeft     int
+	speedUpBlinkTick      int
+	speedUpVisible        bool
 
 	lastJumpKeyPressed    bool
 	lastDuckKeyPressed    bool
@@ -120,6 +124,14 @@ func isDuckKeyPressed() bool {
 	return ebiten.IsKeyPressed(ebiten.KeyDown) || ebiten.IsKeyPressed(ebiten.KeyJ)
 }
 
+func gameSpeedForScore(score int) float64 {
+	speed := baseGameSpeed + float64(score/gameSpeedScoreStep)*gameSpeedStep
+	if speed > maxGameSpeed {
+		return maxGameSpeed
+	}
+	return speed
+}
+
 const (
 	maxjumpCount    = 2
 	maxDuckDuration = 3.0 // 3s for 60 FPS
@@ -148,13 +160,30 @@ const (
 
 	groundHeight = 100
 
-	gameSpeed = float64(5)
+	baseGameSpeed      = 5.0
+	maxGameSpeed       = 10.0
+	gameSpeedStep      = 0.5
+	gameSpeedScoreStep = 500
 
 	sampleRate = 44100
 )
 
 func (g *Game) Update() error {
 	g.animTick++
+	currentSpeed := gameSpeedForScore(g.score)
+	speedStep := g.score / gameSpeedScoreStep
+	maxSpeedStep := int((maxGameSpeed - baseGameSpeed) / gameSpeedStep)
+	if speedStep > maxSpeedStep {
+		speedStep = maxSpeedStep
+	}
+	if speedStep > g.speedLevel {
+		g.speedLevel = speedStep
+		if speedStep > 0 {
+			g.speedUpFramesLeft = shieldReadyDurationFrames
+			g.speedUpBlinkTick = 0
+			g.speedUpVisible = true
+		}
+	}
 
 	// clouds
 	if len(g.clouds) < maxCloudsNum && rand.Intn(100) < 1 {
@@ -187,7 +216,7 @@ func (g *Game) Update() error {
 
 	newClouds := g.clouds[:0]
 	for _, cloud := range g.clouds {
-		cloud.x -= gameSpeed * 0.3
+		cloud.x -= currentSpeed * 0.3
 		if cloud.x+float64(g.cloudFrame.Bounds().Dx()) > 0 {
 			newClouds = append(newClouds, cloud)
 		}
@@ -227,9 +256,14 @@ func (g *Game) Update() error {
 			g.birdSpawnTick = 0
 			g.score = 0
 			g.hasShield = false
+			g.speedLevel = 0
+
 			g.shieldReadyFramesLeft = 0
 			g.shieldReadyBlinkTick = 0
 			g.shieldReadyVisible = false
+			g.speedUpFramesLeft = 0
+			g.speedUpBlinkTick = 0
+			g.speedUpVisible = false
 			g.gameOver = false
 			g.lastRestartKeyPressed = false
 			return nil
@@ -248,6 +282,18 @@ func (g *Game) Update() error {
 	} else if g.shieldReadyVisible {
 		g.shieldReadyVisible = false
 		g.shieldReadyBlinkTick = 0
+	}
+
+	if g.speedUpFramesLeft > 0 {
+		g.speedUpFramesLeft--
+		g.speedUpBlinkTick++
+		if g.speedUpBlinkTick >= shieldReadyBlinkFrames {
+			g.speedUpBlinkTick = 0
+			g.speedUpVisible = !g.speedUpVisible
+		}
+	} else if g.speedUpVisible {
+		g.speedUpVisible = false
+		g.speedUpBlinkTick = 0
 	}
 
 	// jump
@@ -391,8 +437,10 @@ func (g *Game) Update() error {
 					i--
 					continue
 				}
+				g.cactuses = append(g.cactuses[:i], g.cactuses[i+1:]...)
 				g.gameOver = true
-				g.lastRestartKeyPressed = ebiten.IsKeyPressed(ebiten.KeyR) || ebiten.IsKeyPressed(ebiten.KeySpace)
+				g.lastRestartKeyPressed = ebiten.IsKeyPressed(ebiten.KeyR) ||
+					ebiten.IsKeyPressed(ebiten.KeySpace)
 				break
 			}
 		}
@@ -424,8 +472,10 @@ func (g *Game) Update() error {
 					i--
 					continue
 				}
+				g.birds = append(g.birds[:i], g.birds[i+1:]...)
 				g.gameOver = true
-				g.lastRestartKeyPressed = ebiten.IsKeyPressed(ebiten.KeyR) || ebiten.IsKeyPressed(ebiten.KeySpace)
+				g.lastRestartKeyPressed = ebiten.IsKeyPressed(ebiten.KeyR) ||
+					ebiten.IsKeyPressed(ebiten.KeySpace)
 				break
 			}
 		}
@@ -442,14 +492,14 @@ func (g *Game) Update() error {
 	}
 
 	// move ground
-	g.groundX += gameSpeed
+	g.groundX += currentSpeed
 	groundW := g.groundFrame.Bounds().Dx()
 	g.groundX = math.Mod(g.groundX, float64(groundW))
 
 	// move obstacles
 	newCactuses := g.cactuses[:0]
 	for _, c := range g.cactuses {
-		c.x -= gameSpeed
+		c.x -= currentSpeed
 		w := c.img.Bounds().Dx()
 		if c.x+float64(w) > 0 {
 			newCactuses = append(newCactuses, c)
@@ -462,7 +512,7 @@ func (g *Game) Update() error {
 	newBirds := g.birds[:0]
 	for i, b := range g.birds {
 		osc := math.Sin(g.birdOscillationTime + float64(i))
-		speed := gameSpeed + osc*1.5
+		speed := currentSpeed + osc*1.5
 		b.x -= speed
 		b.y += osc * 0.5
 		w := b.img.Bounds().Dx()
@@ -652,6 +702,23 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		drawShieldOpts.GeoM.Translate(10, 80)
 		drawShieldOpts.ColorScale.ScaleWithColor(gray)
 		text.Draw(screen, shieldText, face, drawShieldOpts)
+	}
+
+	if g.speedUpFramesLeft > 0 && g.speedUpVisible && !g.gameOver {
+		speedUpText := "SPEED UP!"
+		levelText := fmt.Sprintf("LEVEL %d", g.speedLevel)
+		speedUpX := float64(screenWidth)/2 - float64(len(speedUpText)*7/2)
+		levelX := float64(screenWidth)/2 - float64(len(levelText)*7/2)
+		speedUpY := float64(screenHeight)/2 - 50
+		levelY := float64(screenHeight)/2 - 30
+		drawSpeedUpOpts := &text.DrawOptions{}
+		drawSpeedUpOpts.GeoM.Translate(speedUpX, speedUpY)
+		drawSpeedUpOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, speedUpText, face, drawSpeedUpOpts)
+		drawLevelOpts := &text.DrawOptions{}
+		drawLevelOpts.GeoM.Translate(levelX, levelY)
+		drawLevelOpts.ColorScale.ScaleWithColor(gray)
+		text.Draw(screen, levelText, face, drawLevelOpts)
 	}
 
 	if g.shieldReadyFramesLeft > 0 && g.shieldReadyVisible && !g.gameOver {

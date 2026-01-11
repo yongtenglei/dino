@@ -80,8 +80,13 @@ with wave.open("./assets/shield.wav", "wb") as wf:
    Old habits die hard — muscle memory, engage! 🎮⌨️💪
 
 1. 🏃‍♂️ Run Harder, Die Slower:
+
    Earn one shield every 1000 points when you don't have one 🏃‍♂️💨🛡️
    Because Dino deserves it. 😤🦖✨
+
+1. ⚡️ Speed Up:
+
+   Keep up, it speeds up as you go. 🚀
 
 ## 🎮 Demo
 
