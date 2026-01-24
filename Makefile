@@ -1,15 +1,12 @@
-.PHONY: all build run test test-cover fmt lint vet clean help
+.PHONY: all build build-release run test test-cover fmt lint vet clean help
 
-# Build the executable
 build:
 	go build -o dino
 	chmod +x dino
 
-# Run the game directly
 run:
 	go run main.go
 
-# Build with optimizations
 build-release:
 	go build -ldflags="-s -w" -o dino
 	chmod +x dino
@@ -37,7 +34,6 @@ check: fmt vet lint gosec
 clean:
 	rm -f dino
 
-# Show help
 help:
 	@echo "Available commands:"
 	@echo "  make build         - Build the executable"
