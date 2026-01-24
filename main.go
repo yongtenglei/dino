@@ -78,7 +78,7 @@ type Game struct {
 	startScreen bool
 	gameOver    bool
 	hasShield   bool
-	speedLevel   int
+	speedLevel  int
 
 	shieldReadyFramesLeft int
 	shieldReadyBlinkTick  int
